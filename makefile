@@ -7,7 +7,7 @@ BUILD_DIR := build
 SRCS := $(wildcard $(SRC_DIR)/*.c)
 OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
 
-LIBS := -lgdi32
+LIBS := -lgdi32 -luser32 -lole32 -loleaut32 -luuid -lshell32
 
 TARGET := SuperWin
 

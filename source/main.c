@@ -1,11 +1,17 @@
 #include <windows.h>
+#include <tchar.h>
+#include <shlobj.h>
+#include <shldisp.h>
 #include <stdbool.h>
+#include <stdio.h>
+
+#include "explorer.h"
 
 // This is a custom command
 #define WM_EXITAPP WM_USER + 1
 #define downtime(key) (GetTickCount() - keys[key].pressed_time)
 
-bool super_mode = false;
+bool super_mode = true;
 
 typedef struct {
     DWORD pressed_time;
@@ -16,19 +22,8 @@ KeyState keys[256] = {0};
 
 HWND hwnd;
 
-//------------------------------------------------------------------------
-// CURRENT IDEAS: 
-//                -HOTKEYS FOR DIRECTORIES
-//                  -If SHIFT+any number is pressed, the currently selected
-//                   directory gets bound to that number.
-//                  -If there is a directory focused and a number is
-//                   pressed, the directory changes its to the bound path
-//                  -If there is not a directory focused/open and a number
-//                   is pressed, then open a directory with the bound path
-//------------------------------------------------------------------------
-
 LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param){
-    if(!n_code == HC_ACTION)
+    if(n_code != HC_ACTION)
         return CallNextHookEx(NULL, n_code, w_param, l_param);
    
     // What the actual fuck
@@ -44,11 +39,33 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
     }
 
     if(w_param == WM_KEYDOWN){
+        if(!super_mode){
+            if(p->vkCode != 0x1B)
+                return CallNextHookEx(NULL, n_code, w_param, l_param);
+            if(downtime(0x1B) > 1000){
+                PostMessage(NULL, WM_EXITAPP, 0, 0);
+                return 1;
+            }
+            if(downtime(0x1B) > 20)
+                return 1;
+            super_mode = true;
+            ShowWindow(hwnd, super_mode);
+            return 1;
+        }
+
+
         DWORD key = p->vkCode;
         switch(key) {
+        case 'C':
+            if(GetAsyncKeyState(VK_CONTROL) >> 15) // MOST SIGNIFICANT BIT IS IF KEY IS DOWN
+                return CallNextHookEx(NULL, n_code, w_param, l_param);
+            open_vscode();
+            return 1;
+
         case 'K':
             MessageBox(NULL, "K was pressed", "Intercepted", MB_ICONINFORMATION);
             return 1;
+
         case 0x1B: //ESC KEY
             if(downtime(0x1B) > 1000) {
                 PostMessage(NULL, WM_EXITAPP, 0, 0);
@@ -56,8 +73,27 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
             }
             if(downtime(0x1B) > 20)
                 return 1;
-            super_mode = !super_mode;
+            super_mode = false;
             ShowWindow(hwnd, super_mode);
+            return 1;
+
+        case 'Q':
+            close_explorer();
+            break;
+        
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            if(GetAsyncKeyState(VK_SHIFT) >> 15)
+                add_explorer_path(key - 48);
+            else
+                open_explorer(key - 48);
             return 1;
         }
     }
@@ -83,6 +119,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         return 0;
 
+    /* MAKES CLICKS GO THROUGH */
     case WM_NCHITTEST:
         return HTTRANSPARENT;
 
@@ -102,7 +139,7 @@ void create_window(HINSTANCE hInstance, int nCmdShow){
     RegisterClass(&window);
 
     hwnd = CreateWindowEx(
-        WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT,
+        WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
         "Notifier",
         "SuperMode Active",
         WS_POPUP,
@@ -118,6 +155,11 @@ void create_window(HINSTANCE hInstance, int nCmdShow){
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow){
+    if(CoInitializeEx(NULL, COINIT_MULTITHREADED) != S_OK){
+        printf("ERROR: Failed to initialize the COM library");
+        return 1;
+    }
+
     create_window(hInstance, nCmdShow);
 
     HHOOK hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInstance, 0);
@@ -141,5 +183,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     UnhookWindowsHookEx(hook);
+    CoUninitialize();
     return msg.wParam;
 }

@@ -1,6 +1,8 @@
 #ifndef EXPLORER_H
 #define EXPLORER_H
 
+#include <stdbool.h>
+
 //------------------------------------------------------------------------
 // CURRENT IDEAS: 
 //         -HOTKEYS FOR DIRECTORIES
@@ -16,6 +18,6 @@ char* get_focused_explorer_path();
 void  add_explorer_path(int preset);
 void  open_explorer(int preset);
 void  close_explorer();
-void  open_vscode();
+bool  open_vscode();
 
 #endif

@@ -169,6 +169,7 @@ void open_explorer(int preset){
             break;
     }
     fclose(f);
+
     ShellExecute(NULL, "open", "explorer.exe", path, NULL, SW_SHOWDEFAULT);
 }
 
@@ -182,10 +183,11 @@ void close_explorer(){
         PostMessage(hwnd, WM_CLOSE, 0, 0);
 }
 
-void open_vscode(){
+bool open_vscode(){
     HWND hwnd = GetForegroundWindow();
-    if(hwnd == NULL) return;
+    if(hwnd == NULL) return false;
     char command[256];
     snprintf(command, sizeof(command), "powershell -ExecutionPolicy Bypass -File scripts/OpenVSCodeInCurrentFolder.ps1 %lld", (long long)hwnd);
     system(command);
+    return true;
 }

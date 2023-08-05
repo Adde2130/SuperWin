@@ -2,10 +2,12 @@
 #include <tchar.h>
 #include <shlobj.h>
 #include <shldisp.h>
+#include <wincodec.h>
 #include <stdbool.h>
 #include <stdio.h>
 
 #include "explorer.h"
+#include "paint.h"
 
 // This is a custom command
 #define WM_EXITAPP WM_USER + 1
@@ -25,7 +27,7 @@ HWND hwnd;
 LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param){
     if(n_code != HC_ACTION)
         return CallNextHookEx(NULL, n_code, w_param, l_param);
-   
+
     // What the actual fuck
     PKBDLLHOOKSTRUCT p = (PKBDLLHOOKSTRUCT)l_param;
 
@@ -40,13 +42,13 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
 
     if(w_param == WM_KEYDOWN){
         if(!super_mode){
-            if(p->vkCode != 0x1B)
+            if(p->vkCode != VK_INSERT)
                 return CallNextHookEx(NULL, n_code, w_param, l_param);
-            if(downtime(0x1B) > 1000){
+            if(downtime(VK_INSERT) > 1000){
                 PostMessage(NULL, WM_EXITAPP, 0, 0);
                 return 1;
             }
-            if(downtime(0x1B) > 20)
+            if(downtime(VK_INSERT) > 20)
                 return 1;
             super_mode = true;
             ShowWindow(hwnd, super_mode);
@@ -59,19 +61,19 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
         case 'C':
             if(GetAsyncKeyState(VK_CONTROL) >> 15) // MOST SIGNIFICANT BIT IS IF KEY IS DOWN
                 return CallNextHookEx(NULL, n_code, w_param, l_param);
-            open_vscode();
+            if(!open_vscode())
+                return CallNextHookEx(NULL, n_code, w_param, l_param);
             return 1;
 
         case 'K':
-            MessageBox(NULL, "K was pressed", "Intercepted", MB_ICONINFORMATION);
             return 1;
 
-        case 0x1B: //ESC KEY
-            if(downtime(0x1B) > 1000) {
+        case VK_INSERT: //ESC KEY
+            if(downtime(VK_INSERT) > 1000) {
                 PostMessage(NULL, WM_EXITAPP, 0, 0);
                 return 1;
             }
-            if(downtime(0x1B) > 20)
+            if(downtime(VK_INSERT) > 20)
                 return 1;
             super_mode = false;
             ShowWindow(hwnd, super_mode);
@@ -104,20 +106,9 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
 // Callbacks to the visible part
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch(msg) {
-    case WM_PAINT:
-        {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-
-            // Drawing a red rectangle
-            HBRUSH brush = CreateSolidBrush(RGB(71, 140, 237));
-            RECT rect = {0, 0, 1920, 1080};
-            FillRect(hdc, &rect, brush);
-            DeleteObject(brush);
-
-            EndPaint(hwnd, &ps);
-        }
+    case WM_PAINT: {
         return 0;
+    }
 
     /* MAKES CLICKS GO THROUGH */
     case WM_NCHITTEST:
@@ -136,19 +127,20 @@ void create_window(HINSTANCE hInstance, int nCmdShow){
     window.lpfnWndProc = WndProc;
     window.hInstance = hInstance;
     window.lpszClassName = "Notifier";
+    window.hbrBackground = (HBRUSH)GetStockObject(NULL_BRUSH);
     RegisterClass(&window);
 
     hwnd = CreateWindowEx(
-        WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
+        WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         "Notifier",
         "SuperMode Active",
         WS_POPUP,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        1920, 1080,
+        1750, 50,
+        200, 200,
         NULL, NULL, hInstance, NULL
     );
 
-    SetLayeredWindowAttributes(hwnd, 0, 14, LWA_ALPHA);
+    create_window_content(hwnd, L"gfx/icon.png");
 
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
@@ -159,6 +151,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         printf("ERROR: Failed to initialize the COM library");
         return 1;
     }
+    paint_init();
+    
 
     create_window(hInstance, nCmdShow);
 
@@ -182,6 +176,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         DispatchMessage(&msg);
     }
 
+    paint_uninit();
     UnhookWindowsHookEx(hook);
     CoUninitialize();
     return msg.wParam;

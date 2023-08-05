@@ -15,5 +15,5 @@ $shell.Windows() | ForEach-Object {
 # Check if the folder path was found
 if ($folderPath) {
     # Open VS Code in the folder path
-    Start-Process code $folderPath
+    Start-Process code "`"$folderPath`""
 } 

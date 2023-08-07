@@ -212,3 +212,36 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     CoUninitialize();
     return msg.wParam;
 }
+
+fix_files(){
+    if (!CreateDirectory("cfg", NULL)) {
+        DWORD error = GetLastError();
+        if (error != ERROR_ALREADY_EXISTS) {
+            printf("Failed to create directory. Error code: %lu\n", error);
+            return 1;
+        }
+    }
+
+    HANDLE hFile = CreateFile(
+        "cfg\\exp_presets.txt",           // File path
+        GENERIC_WRITE,                    // Open for writing
+        0,                                // Do not share
+        NULL,                             // Default security
+        CREATE_ALWAYSCREATE_NEW,                    // Overwrite existing
+        FILE_ATTRIBUTE_NORMAL,            // Normal file
+        NULL                              // No attribute template
+    );
+
+    if(!hFile){
+        DWORD error = GetLastError();
+        if (error != ERROR_FILE_EXISTS) {
+            printf("Failed to create file. Error code: %lu\n", error);
+            return 1;
+        }
+    }
+
+    for(int i = 0; i < 10; i++)
+        fprintf(hFile, "C:\\\n");
+
+    
+}

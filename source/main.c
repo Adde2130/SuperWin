@@ -6,6 +6,12 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#ifdef WIN32
+#include <io.h>
+#define F_OK 0
+#define access _access
+#endif
+
 #include "explorer.h"
 #include "paint.h"
 
@@ -177,7 +183,34 @@ void create_window(HINSTANCE hInstance, int nCmdShow){
     UpdateWindow(hwnd);
 }
 
+void fix_files(){
+    if (!CreateDirectory("cfg", NULL)) {
+        DWORD error = GetLastError();
+        if (error != ERROR_ALREADY_EXISTS) {
+            printf("Failed to create directory. Error code: %lu\n", error);
+            return;
+        }
+    }
+
+    if(access("cfg\\exp_presets", F_OK)) { // returns 0 if file exists
+        FILE* f = fopen("cfg\\exp_presets", "w");
+
+        if(!f) {
+            DWORD error = GetLastError();
+            printf("Failed to create file. Error code: %lu\n", error);
+        } else {
+            for(int i = 0; i < 9; i++)
+                fprintf(f, "C:\\\n");
+            fclose(f);
+        }
+    }
+
+    
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow){
+    fix_files();
+
     if(CoInitializeEx(NULL, COINIT_MULTITHREADED) != S_OK){
         printf("ERROR: Failed to initialize the COM library");
         return 1;
@@ -211,37 +244,4 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     UnhookWindowsHookEx(hook);
     CoUninitialize();
     return msg.wParam;
-}
-
-fix_files(){
-    if (!CreateDirectory("cfg", NULL)) {
-        DWORD error = GetLastError();
-        if (error != ERROR_ALREADY_EXISTS) {
-            printf("Failed to create directory. Error code: %lu\n", error);
-            return 1;
-        }
-    }
-
-    HANDLE hFile = CreateFile(
-        "cfg\\exp_presets.txt",           // File path
-        GENERIC_WRITE,                    // Open for writing
-        0,                                // Do not share
-        NULL,                             // Default security
-        CREATE_ALWAYSCREATE_NEW,                    // Overwrite existing
-        FILE_ATTRIBUTE_NORMAL,            // Normal file
-        NULL                              // No attribute template
-    );
-
-    if(!hFile){
-        DWORD error = GetLastError();
-        if (error != ERROR_FILE_EXISTS) {
-            printf("Failed to create file. Error code: %lu\n", error);
-            return 1;
-        }
-    }
-
-    for(int i = 0; i < 10; i++)
-        fprintf(hFile, "C:\\\n");
-
-    
 }

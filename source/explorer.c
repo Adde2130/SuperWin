@@ -1,4 +1,5 @@
 #include "explorer.h"
+#include "window.h"
 #include <windows.h>
 #include <tchar.h>
 #include <shlobj.h>
@@ -389,4 +390,13 @@ bool open_vscode(){
     snprintf(command, sizeof(command), "powershell -ExecutionPolicy Bypass -File scripts/OpenVSCodeInCurrentFolder.ps1 %lld", (long long)hwnd);
     system(command);
     return true;
+}
+
+void center_explorers(){
+    HWND* windows = get_all_explorer_windows(NULL);
+    int size = 0;
+    for(;windows[size];size++); // This looks horrible
+    for(int i = 0; i < size; i++){
+        center_window(windows[i]);
+    }
 }

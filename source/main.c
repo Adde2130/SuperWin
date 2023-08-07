@@ -11,6 +11,7 @@
 
 // This is a custom command
 #define WM_EXITAPP WM_USER + 1
+
 #define downtime(key) (GetTickCount() - keys[key].pressed_time)
 
 bool super_mode = true;
@@ -29,7 +30,7 @@ int tick = 0;
 
 bool animate_in = true;
 
-void animate(HWND hwnd){
+void animate_window(HWND hwnd){
     int curve_pos = wx + 225 + tick * tick - 30 * tick;
     int curve_speed = 2 * tick - 30;
     
@@ -86,6 +87,10 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
                 return CallNextHookEx(NULL, n_code, w_param, l_param);
             return 1;
 
+        case 'F':
+            center_explorers();
+            return 1;
+
         case VK_INSERT: //ESC KEY
             if(downtime(VK_INSERT) > 1000) {
                 PostMessage(NULL, WM_EXITAPP, 0, 0);
@@ -128,7 +133,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         SetTimer(hwnd, 1, 1, NULL);
         return 0;
     case WM_TIMER:
-        animate(hwnd);
+        animate_window(hwnd);
         return 0;
     case WM_PAINT:
         return 0;

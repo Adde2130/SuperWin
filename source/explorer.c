@@ -10,12 +10,49 @@
    I ASKED CHATGPT TO REFACTOR IT TO C WHILE MAKING IT PRINT THE PIDL INSTEAD OF PUSHING IT TO A LIST.
    IF THIS BREAKS, THEN IDK WHAT TO DO
 */
-char* get_focused_explorer_path(){
+
+IDispatch* get_explorer(IShellWindows* psw, HWND hwnd){
+    long count = 0;
+    HRESULT hr = psw->lpVtbl->get_Count(psw, &count);
+    if (FAILED(hr)) {
+        fprintf(stderr, "Could not get number of shell windows\n");
+        return NULL;
+    }
+
+    for (long i = 0; i < count; ++i) {
+        VARIANT vi;
+        VariantInit(&vi);
+        vi.vt = VT_I4;
+        vi.lVal = i;
+        IDispatch *pDisp = NULL;
+        hr = psw->lpVtbl->Item(psw, vi, &pDisp);
+
+        if (FAILED(hr) || !pDisp)
+            continue;
+
+        IWebBrowserApp *pApp = NULL;
+        hr = pDisp->lpVtbl->QueryInterface(pDisp, &IID_IWebBrowserApp, (void**)&pApp);
+
+        if (FAILED(hr) || !pApp)
+            continue;
+
+        HWND temphwnd;
+        pApp->lpVtbl->get_HWND(pApp, (SHANDLE_PTR*)&temphwnd);
+        if(temphwnd != hwnd)
+            continue;
+
+        return pDisp;
+    }
+
+    return NULL;
+}
+
+char* get_explorer_path(HWND hwnd){
     HWND tophwnd = GetForegroundWindow();
     if(tophwnd == NULL) return NULL;
 
-    IShellWindows *pshWindows = NULL;
-    HRESULT hr = CoCreateInstance(&CLSID_ShellWindows, NULL, CLSCTX_ALL, &IID_IShellWindows, (void**)&pshWindows);
+    IShellWindows *psw = NULL;
+    HRESULT hr = CoCreateInstance(&CLSID_ShellWindows, NULL, CLSCTX_ALL, &IID_IShellWindows, (void**)&psw);
 
     if (FAILED(hr)) {
         fprintf(stderr, "Could not create instance of IShellWindows\n");
@@ -23,7 +60,89 @@ char* get_focused_explorer_path(){
     }
 
     long count = 0;
-    hr = pshWindows->lpVtbl->get_Count(pshWindows, &count);
+    hr = psw->lpVtbl->get_Count(psw, &count);
+
+    if (FAILED(hr)) {
+        fprintf(stderr, "Could not get number of shell windows\n");
+        return NULL;
+    }
+
+    IDispatch* pdisp = get_explorer(psw, hwnd);
+
+    IServiceProvider *psp = NULL;
+    hr = pdisp->lpVtbl->QueryInterface(pdisp, &IID_IServiceProvider, (void**)&psp);
+    if (FAILED(hr) || !psp){
+        printf("Failed to query IServiceProvider interface\n");
+        return NULL;
+    }
+        
+
+    IShellBrowser *pBrowser = NULL;
+    hr = psp->lpVtbl->QueryService(psp, &SID_STopLevelBrowser, &IID_IShellBrowser, (void**)&pBrowser);
+    if (FAILED(hr)){
+        printf("Failed to query shell browser");
+        return NULL;
+    }
+        
+
+    IShellView *pShellView = NULL;
+    hr = pBrowser->lpVtbl->QueryActiveShellView(pBrowser, &pShellView);
+    if (FAILED(hr)){
+        printf("Failed to query Shell View");
+        return NULL;
+    }
+        
+
+    IFolderView *pFolderView = NULL;
+    hr = pShellView->lpVtbl->QueryInterface(pShellView, &IID_IFolderView, (void**)&pFolderView);
+    if (FAILED(hr) || !pFolderView){
+        printf("Failed to query folder view");
+        return NULL;
+    }
+        
+
+    IPersistFolder2 *pFolder = NULL;
+    hr = pFolderView->lpVtbl->GetFolder(pFolderView, &IID_IPersistFolder2, (void**)&pFolder);
+    if (FAILED(hr)){
+        printf("Failed to query folder");
+        return NULL;
+    }
+        
+
+    LPITEMIDLIST pidl = NULL;
+    hr = pFolder->lpVtbl->GetCurFolder(pFolder, &pidl);
+    if (!SUCCEEDED(hr)) {
+        printf("Failed to get current folder PIDL");
+        return NULL;
+    }
+
+    TCHAR szPath[MAX_PATH];
+    if (SHGetPathFromIDList(pidl, szPath))
+    {
+        CoTaskMemFree(pidl);
+        return strdup(szPath);
+    }
+    else
+    {
+        printf("Failed to convert PIDL to path.\n");
+    }
+    // Free the PIDL when done.
+    CoTaskMemFree(pidl);
+
+    return NULL;
+}
+
+HWND get_explorer_from_path(const char* path){
+    IShellWindows *psw = NULL;
+    HRESULT hr = CoCreateInstance(&CLSID_ShellWindows, NULL, CLSCTX_ALL, &IID_IShellWindows, (void**)&psw);
+
+    if (FAILED(hr)) {
+        fprintf(stderr, "Could not create instance of IShellWindows\n");
+        return NULL;
+    }
+
+    long count = 0;
+    hr = psw->lpVtbl->get_Count(psw, &count);
 
     if (FAILED(hr)) {
         fprintf(stderr, "Could not get number of shell windows\n");
@@ -36,7 +155,7 @@ char* get_focused_explorer_path(){
         vi.vt = VT_I4;
         vi.lVal = i;
         IDispatch *pDisp = NULL;
-        hr = pshWindows->lpVtbl->Item(pshWindows, vi, &pDisp);
+        hr = psw->lpVtbl->Item(psw, vi, &pDisp);
 
         if (FAILED(hr) || !pDisp)
             continue;
@@ -49,7 +168,7 @@ char* get_focused_explorer_path(){
 
         HWND hwnd;
         pApp->lpVtbl->get_HWND(pApp, (SHANDLE_PTR*)&hwnd);
-        if(hwnd != tophwnd)
+        if(!hwnd)
             continue;
 
         IServiceProvider *psp = NULL;
@@ -90,8 +209,10 @@ char* get_focused_explorer_path(){
             TCHAR szPath[MAX_PATH];
             if (SHGetPathFromIDList(pidl, szPath))
             {
-                CoTaskMemFree(pidl);
-                return strdup(szPath);
+                if(strcmp(szPath, path) == 0) {
+                    CoTaskMemFree(pidl);
+                    return hwnd;
+                } 
             }
             else
             {
@@ -105,8 +226,66 @@ char* get_focused_explorer_path(){
     return NULL;
 }
 
+bool explorer_change_content(HWND hwnd, const char* path){
+    IShellWindows *psw = NULL;
+    HRESULT hr = CoCreateInstance(&CLSID_ShellWindows, NULL, CLSCTX_ALL, &IID_IShellWindows, (void**)&psw);
+    if(FAILED(hr)) {
+        printf("Failed to create COM library instance\n");
+        return false;
+    }
+
+    char classname[256];
+    GetClassName(hwnd, classname, sizeof(classname));
+    if(strcmp(classname, "CabinetWClass")){
+        psw->lpVtbl->Release(psw);
+        return false;
+    }
+        
+    IDispatch* pdisp = get_explorer(psw, hwnd);  
+    if(pdisp == NULL){
+        return false;
+    }
+
+    psw->lpVtbl->Release(psw);
+
+    IServiceProvider* psp;
+    hr = pdisp->lpVtbl->QueryInterface(pdisp, &IID_IServiceProvider, (void**)&psp);
+    if(FAILED(hr) || !psp){
+        printf("Failed to query ISeriveProvider\n");
+        pdisp->lpVtbl->Release(pdisp);
+        return false;
+    }
+    pdisp->lpVtbl->Release(pdisp);
+
+    IShellBrowser* psb;
+    hr = psp->lpVtbl->QueryService(psp, &SID_STopLevelBrowser, &IID_IShellBrowser, (void**)&psb);
+    if(FAILED(hr) || !psb){
+        printf("Failed to query shell browser");
+        psp->lpVtbl->Release(psp);
+        return false;
+    }
+    psp->lpVtbl->Release(psp);
+
+
+    LPITEMIDLIST pidl = ILCreateFromPath(_T(path));
+    if (pidl)
+    {
+        hr = psb->lpVtbl->BrowseObject(psb, pidl, SVSI_DESELECTOTHERS | SVSI_SELECT | SVSI_ENSUREVISIBLE | SVSI_FOCUSED | SVSI_DESELECT);
+        psb->lpVtbl->Release(psb);
+        if(FAILED(hr)){
+            printf("Failed to browse object\n");
+            return false;
+        }
+        ILFree(pidl);
+        return true;
+    }
+    psb->lpVtbl->Release(psb);
+
+    return false;
+}
+
 void add_explorer_path(int preset){
-    char* path = get_focused_explorer_path();
+    char* path = get_explorer_path(GetForegroundWindow());
     if(path == NULL)
         return;
     
@@ -168,9 +347,30 @@ void open_explorer(int preset){
         if(line == preset)
             break;
     }
-    fclose(f);
+    path[strcspn(path, "\n")] = 0;
 
-    ShellExecute(NULL, "open", "explorer.exe", path, NULL, SW_SHOWDEFAULT);
+    fclose(f);
+    if( GetAsyncKeyState(VK_SHIFT) >> 15){
+        ShellExecute(NULL, "open", "explorer.exe", path, NULL, SW_SHOWDEFAULT);
+        return;
+    }
+
+    HWND hwnd = get_explorer_from_path(path);
+    if(hwnd) {
+    /*  Little cheat to bypass the SetForegroundWindow restriction used when the function is called too often.
+        This can cause problems, since it will press control for the user, and can thus accidentally input
+        something unintentional. This should not be a problem since it only happens when an explorer is focused. */
+        keybd_event(VK_CONTROL, 0, KEYEVENTF_EXTENDEDKEY | 0, 0);
+        keybd_event(VK_CONTROL, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0);
+
+        BringWindowToTop(hwnd);
+        SetFocus(hwnd);
+        SetForegroundWindow(hwnd);
+        return;
+    }
+    
+    if(!explorer_change_content(GetForegroundWindow(), path))
+        ShellExecute(NULL, "open", "explorer.exe", path, NULL, SW_SHOWDEFAULT);
 }
 
 void close_explorer(){
@@ -186,6 +386,12 @@ void close_explorer(){
 bool open_vscode(){
     HWND hwnd = GetForegroundWindow();
     if(hwnd == NULL) return false;
+
+    char classname[256];
+    GetClassName(hwnd, classname, sizeof(classname));
+    if(strcmp(classname, "CabinetWClass"))
+        return false;
+    
     char command[256];
     snprintf(command, sizeof(command), "powershell -ExecutionPolicy Bypass -File scripts/OpenVSCodeInCurrentFolder.ps1 %lld", (long long)hwnd);
     system(command);

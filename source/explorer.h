@@ -2,6 +2,8 @@
 #define EXPLORER_H
 
 #include <stdbool.h>
+#include <windows.h>
+#include <ShlObj.h>
 
 //------------------------------------------------------------------------
 // CURRENT IDEAS: 
@@ -14,10 +16,12 @@
 //                   is pressed, then open a directory with the bound path
 //------------------------------------------------------------------------
 
-char* get_focused_explorer_path();
-void  add_explorer_path(int preset);
-void  open_explorer(int preset);
-void  close_explorer();
-bool  open_vscode();
+IDispatch* get_explorer(IShellWindows* psw, HWND hwnd);
+char*      get_explorer_path(HWND hwnd);
+void       add_explorer_path(int preset);
+void       open_explorer(int preset);
+void       close_explorer();
+bool       open_vscode();
+bool       explorer_change_content(HWND hwnd, const char* path);
 
 #endif

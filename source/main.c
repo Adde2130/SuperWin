@@ -23,6 +23,18 @@ typedef struct {
 KeyState keys[256] = {0};
 
 HWND hwnd;
+int wx, wy;
+
+int tick;
+
+void animate(HWND hwnd){
+    int curve_pos = wx + 100 + tick * tick - 20 * tick;
+    int curve_speed = 2 * tick - 20;
+    if(curve_speed < 0)
+        tick++;
+
+    SetWindowPos(hwnd, NULL, curve_pos, wy, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+}
 
 LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param){
     if(n_code != HC_ACTION)
@@ -51,6 +63,9 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
             if(downtime(VK_INSERT) > 20)
                 return 1;
             super_mode = true;
+            tick = 0;
+            SetWindowPos(hwnd, NULL, 2000, wy, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+
             ShowWindow(hwnd, super_mode);
             return 1;
         }
@@ -92,7 +107,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
         case '7':
         case '8':
         case '9':
-            if(GetAsyncKeyState(VK_SHIFT) >> 15)
+            if(GetAsyncKeyState(VK_CONTROL) >> 15)
                 add_explorer_path(key - 48);
             else
                 open_explorer(key - 48);
@@ -106,9 +121,14 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
 // Callbacks to the visible part
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch(msg) {
-    case WM_PAINT: {
+    case WM_CREATE:
+        SetTimer(hwnd, 1, 1, NULL);
         return 0;
-    }
+    case WM_TIMER:
+        animate(hwnd);
+        return 0;
+    case WM_PAINT:
+        return 0;
 
     /* MAKES CLICKS GO THROUGH */
     case WM_NCHITTEST:
@@ -130,12 +150,15 @@ void create_window(HINSTANCE hInstance, int nCmdShow){
     window.hbrBackground = (HBRUSH)GetStockObject(NULL_BRUSH);
     RegisterClass(&window);
 
+    wx = 1750;
+    wy = 50;
+
     hwnd = CreateWindowEx(
         WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         "Notifier",
         "SuperMode Active",
         WS_POPUP,
-        1750, 50,
+        2000, wy,
         200, 200,
         NULL, NULL, hInstance, NULL
     );

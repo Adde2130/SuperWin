@@ -25,13 +25,19 @@ KeyState keys[256] = {0};
 HWND hwnd;
 int wx, wy;
 
-int tick;
+int tick = 0;
+
+bool animate_in = true;
 
 void animate(HWND hwnd){
-    int curve_pos = wx + 100 + tick * tick - 20 * tick;
-    int curve_speed = 2 * tick - 20;
-    if(curve_speed < 0)
+    int curve_pos = wx + 225 + tick * tick - 30 * tick;
+    int curve_speed = 2 * tick - 30;
+    
+    if(animate_in && curve_speed < 0)
         tick++;
+    else if(!animate_in && tick > 0)
+        tick--;
+    else return;
 
     SetWindowPos(hwnd, NULL, curve_pos, wy, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 }
@@ -63,7 +69,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
             if(downtime(VK_INSERT) > 20)
                 return 1;
             super_mode = true;
-            tick = 0;
+            animate_in = true;
             SetWindowPos(hwnd, NULL, 2000, wy, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 
             ShowWindow(hwnd, super_mode);
@@ -80,9 +86,6 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
                 return CallNextHookEx(NULL, n_code, w_param, l_param);
             return 1;
 
-        case 'K':
-            return 1;
-
         case VK_INSERT: //ESC KEY
             if(downtime(VK_INSERT) > 1000) {
                 PostMessage(NULL, WM_EXITAPP, 0, 0);
@@ -91,7 +94,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
             if(downtime(VK_INSERT) > 20)
                 return 1;
             super_mode = false;
-            ShowWindow(hwnd, super_mode);
+            animate_in = false;
             return 1;
 
         case 'Q':

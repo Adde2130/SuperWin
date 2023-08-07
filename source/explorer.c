@@ -6,11 +6,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-/* IMPORTANT: THIS CODE IS FROM https://stackoverflow.com/questions/43815932/how-to-get-the-path-of-an-active-file-explorer-window-in-c-winapi 
-   I ASKED CHATGPT TO REFACTOR IT TO C WHILE MAKING IT PRINT THE PIDL INSTEAD OF PUSHING IT TO A LIST.
-   IF THIS BREAKS, THEN IDK WHAT TO DO
-*/
-
 IDispatch* get_explorer(IShellWindows* psw, HWND hwnd){
     long count = 0;
     HRESULT hr = psw->lpVtbl->get_Count(psw, &count);
@@ -72,7 +67,7 @@ char* get_explorer_path(HWND hwnd){
     IServiceProvider *psp = NULL;
     hr = pdisp->lpVtbl->QueryInterface(pdisp, &IID_IServiceProvider, (void**)&psp);
     if (FAILED(hr) || !psp){
-        printf("Failed to query IServiceProvider interface\n");
+        fprintf(stderr, "Failed to query IServiceProvider interface\n");
         return NULL;
     }
         
@@ -80,7 +75,7 @@ char* get_explorer_path(HWND hwnd){
     IShellBrowser *pBrowser = NULL;
     hr = psp->lpVtbl->QueryService(psp, &SID_STopLevelBrowser, &IID_IShellBrowser, (void**)&pBrowser);
     if (FAILED(hr)){
-        printf("Failed to query shell browser");
+        fprintf(stderr, "Failed to query shell browser\n");
         return NULL;
     }
         
@@ -88,7 +83,7 @@ char* get_explorer_path(HWND hwnd){
     IShellView *pShellView = NULL;
     hr = pBrowser->lpVtbl->QueryActiveShellView(pBrowser, &pShellView);
     if (FAILED(hr)){
-        printf("Failed to query Shell View");
+        fprintf(stderr, "Failed to query Shell View\n");
         return NULL;
     }
         
@@ -96,7 +91,7 @@ char* get_explorer_path(HWND hwnd){
     IFolderView *pFolderView = NULL;
     hr = pShellView->lpVtbl->QueryInterface(pShellView, &IID_IFolderView, (void**)&pFolderView);
     if (FAILED(hr) || !pFolderView){
-        printf("Failed to query folder view");
+        fprintf(stderr, "Failed to query folder view\n");
         return NULL;
     }
         
@@ -104,7 +99,7 @@ char* get_explorer_path(HWND hwnd){
     IPersistFolder2 *pFolder = NULL;
     hr = pFolderView->lpVtbl->GetFolder(pFolderView, &IID_IPersistFolder2, (void**)&pFolder);
     if (FAILED(hr)){
-        printf("Failed to query folder");
+        fprintf(stderr, "Failed to query folder\n");
         return NULL;
     }
         
@@ -112,7 +107,7 @@ char* get_explorer_path(HWND hwnd){
     LPITEMIDLIST pidl = NULL;
     hr = pFolder->lpVtbl->GetCurFolder(pFolder, &pidl);
     if (!SUCCEEDED(hr)) {
-        printf("Failed to get current folder PIDL");
+        fprintf(stderr, "Failed to get current folder PIDL\n");
         return NULL;
     }
 
@@ -124,7 +119,7 @@ char* get_explorer_path(HWND hwnd){
     }
     else
     {
-        printf("Failed to convert PIDL to path.\n");
+        fprintf(stderr, "Failed to convert PIDL to path.\n");
     }
     // Free the PIDL when done.
     CoTaskMemFree(pidl);
@@ -216,7 +211,7 @@ HWND get_explorer_from_path(const char* path){
             }
             else
             {
-                printf("Failed to convert PIDL to path.\n");
+                fprintf(stderr, "Failed to convert PIDL to path.\n");
             }
             // Free the PIDL when done.
             CoTaskMemFree(pidl);
@@ -230,7 +225,7 @@ bool explorer_change_content(HWND hwnd, const char* path){
     IShellWindows *psw = NULL;
     HRESULT hr = CoCreateInstance(&CLSID_ShellWindows, NULL, CLSCTX_ALL, &IID_IShellWindows, (void**)&psw);
     if(FAILED(hr)) {
-        printf("Failed to create COM library instance\n");
+        fprintf(stderr, "Failed to create COM library instance\n");
         return false;
     }
 
@@ -251,7 +246,7 @@ bool explorer_change_content(HWND hwnd, const char* path){
     IServiceProvider* psp;
     hr = pdisp->lpVtbl->QueryInterface(pdisp, &IID_IServiceProvider, (void**)&psp);
     if(FAILED(hr) || !psp){
-        printf("Failed to query ISeriveProvider\n");
+        fprintf(stderr, "Failed to query ISeriveProvider\n");
         pdisp->lpVtbl->Release(pdisp);
         return false;
     }
@@ -260,7 +255,7 @@ bool explorer_change_content(HWND hwnd, const char* path){
     IShellBrowser* psb;
     hr = psp->lpVtbl->QueryService(psp, &SID_STopLevelBrowser, &IID_IShellBrowser, (void**)&psb);
     if(FAILED(hr) || !psb){
-        printf("Failed to query shell browser");
+        fprintf(stderr, "Failed to query shell browser\n");
         psp->lpVtbl->Release(psp);
         return false;
     }
@@ -273,7 +268,7 @@ bool explorer_change_content(HWND hwnd, const char* path){
         hr = psb->lpVtbl->BrowseObject(psb, pidl, SVSI_DESELECTOTHERS | SVSI_SELECT | SVSI_ENSUREVISIBLE | SVSI_FOCUSED | SVSI_DESELECT);
         psb->lpVtbl->Release(psb);
         if(FAILED(hr)){
-            printf("Failed to browse object\n");
+            fprintf(stderr, "Failed to browse object\n");
             return false;
         }
         ILFree(pidl);
@@ -291,7 +286,7 @@ void add_explorer_path(int preset){
     
     FILE* f = fopen("cfg/exp_presets", "r");
     if(f == NULL) {
-        printf("WARNING: exp_presets missing");
+        fprintf(stderr, "WARNING: exp_presets missing\n");
     }
 
     FILE *temp_file = tmpfile();
@@ -311,10 +306,8 @@ void add_explorer_path(int preset){
             fprintf(temp_file, "%s", buffer);
         }
     }
-
     fclose(f);
 
-    // Annoying...
     f = fopen("cfg/exp_presets", "w");
     if (f == NULL) {
         perror("Failed to open file for writing");
@@ -336,7 +329,7 @@ void add_explorer_path(int preset){
 void open_explorer(int preset){
     FILE* f = fopen("cfg/exp_presets", "r");
     if(f == NULL) {
-        printf("WARNING: exp_presets missing");
+        fprintf(stderr, "WARNING: exp_presets missing\n");
         return;
     }
 
@@ -358,8 +351,8 @@ void open_explorer(int preset){
     HWND hwnd = get_explorer_from_path(path);
     if(hwnd) {
     /*  Little cheat to bypass the SetForegroundWindow restriction used when the function is called too often.
-        This can cause problems, since it will press control for the user, and can thus accidentally input
-        something unintentional. This should not be a problem since it only happens when an explorer is focused. */
+        This potentially causes problems, since it will press control for the user, and thus may accidentally input
+        something unintentional. This should not the case though since it only happens when an explorer is focused. */
         keybd_event(VK_CONTROL, 0, KEYEVENTF_EXTENDEDKEY | 0, 0);
         keybd_event(VK_CONTROL, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0);
 
@@ -368,7 +361,7 @@ void open_explorer(int preset){
         SetForegroundWindow(hwnd);
         return;
     }
-    
+
     if(!explorer_change_content(GetForegroundWindow(), path))
         ShellExecute(NULL, "open", "explorer.exe", path, NULL, SW_SHOWDEFAULT);
 }

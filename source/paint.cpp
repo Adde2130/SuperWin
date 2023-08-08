@@ -15,40 +15,40 @@ void paint_uninit(){
     Gdiplus::GdiplusShutdown(gdiplusToken);
 }
 
-void paint_image(HWND hwnd, const WCHAR* filename){
-    PAINTSTRUCT ps;
-    HDC hdc = BeginPaint(hwnd, &ps);
-    //Gdiplus::Graphics graphics(hdc);
-
-    // Load the image
-    Gdiplus::Image image(filename);
-    Gdiplus::Bitmap bitmap(image.GetWidth(), image.GetHeight(), PixelFormat32bppARGB);
-
-    // Draw the Image onto the Bitmap
-    Gdiplus::Graphics graphics(&bitmap);
-    graphics.DrawImage(&image, 0, 0, image.GetWidth(), image.GetHeight());
-
-    // Draw the Bitmap onto the window
-    Gdiplus::Graphics g(hdc);
-    g.DrawImage(&bitmap, 0, 0, bitmap.GetWidth(), bitmap.GetHeight());
-
-    EndPaint(hwnd, &ps);
-}
-
 /* HAHAHHA HOW THE FUCK DOES THIS WORK, DON'T TOUCH, SUPER VOLATILE CHATGPT CODE */
-void create_window_content(HWND hwnd, const WCHAR* filename){
+void create_window_content(HWND hwnd, float rotation){
+    const int padding = 0;
 
-    // Load the image
-    Gdiplus::Image image(filename); // replace with your image path
+    // Load the bot_layer
+    Gdiplus::Image bot_layer(L"gfx\\icon_l1.png");
+    Gdiplus::Image top_layer(L"gfx\\icon_l2.png");
 
     // Create a Bitmap
-    Gdiplus::Bitmap bitmap(image.GetWidth(), image.GetHeight(), PixelFormat32bppARGB);
+    Gdiplus::Bitmap bitmap(bot_layer.GetWidth() + padding, bot_layer.GetHeight() + padding, PixelFormat32bppARGB);
     
-    // Draw the Image onto the Bitmap
+    // Draw the bot_layer onto the Bitmap
     Gdiplus::Graphics graphics(&bitmap);
-    graphics.DrawImage(&image, 0, 0, image.GetWidth(), image.GetHeight());
 
-   // Get the HBITMAP from the Gdiplus::Bitmap
+    // Set the quality settings for anti-aliasing and high-quality rendering
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+    graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+
+    Gdiplus::PointF rotationCenter(bitmap.GetWidth() / 2.0f, bitmap.GetHeight() / 2.0f);
+
+    graphics.TranslateTransform(rotationCenter.X, rotationCenter.Y);
+    graphics.RotateTransform(rotation);
+    graphics.TranslateTransform(-rotationCenter.X, -rotationCenter.Y);
+
+    graphics.DrawImage(&bot_layer, padding / 2, padding / 2, bot_layer.GetWidth(), bot_layer.GetHeight());
+
+    graphics.TranslateTransform(rotationCenter.X, rotationCenter.Y);
+    graphics.RotateTransform(-rotation);
+    graphics.TranslateTransform(-rotationCenter.X, -rotationCenter.Y);
+
+    graphics.DrawImage(&top_layer, padding / 2, padding / 2, bot_layer.GetWidth(), bot_layer.GetHeight());
+
+    // Get the HBITMAP from the Gdiplus::Bitmap
     HBITMAP hbitmap;
     bitmap.GetHBITMAP(Gdiplus::Color(0,0,0,0), &hbitmap);
 
@@ -66,8 +66,9 @@ void create_window_content(HWND hwnd, const WCHAR* filename){
     bf.SourceConstantAlpha = 255; // fully opaque
     bf.AlphaFormat = AC_SRC_ALPHA; // use alpha channel
 
+
     // Define size and pointSource
-    SIZE size = { static_cast<LONG>(image.GetWidth()), static_cast<LONG>(image.GetHeight()) };
+    SIZE size = { static_cast<LONG>(bot_layer.GetWidth() + padding), static_cast<LONG>(bot_layer.GetHeight() + padding)};
     POINT pointSource = { 0, 0 };
 
     // Update the layered window

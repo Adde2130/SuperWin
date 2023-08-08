@@ -14,6 +14,7 @@
 
 #include "explorer.h"
 #include "paint.h"
+#include "window.h"
 
 // This is a custom command
 #define WM_EXITAPP WM_USER + 1
@@ -21,6 +22,7 @@
 #define downtime(key) (GetTickCount() - keys[key].pressed_time)
 
 bool super_mode = true;
+float r = 0.1;
 
 typedef struct {
     DWORD pressed_time;
@@ -97,20 +99,17 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
             center_explorers();
             return 1;
 
-        case VK_INSERT: //ESC KEY
-            if(downtime(VK_INSERT) > 1000) {
-                PostMessage(NULL, WM_EXITAPP, 0, 0);
-                return 1;
-            }
-            if(downtime(VK_INSERT) > 20)
-                return 1;
-            super_mode = false;
-            animate_in = false;
-            return 1;
-
         case 'Q':
             close_explorer();
-            break;
+            return 1;
+
+        case 'R':
+            stack_windows_diagonal(get_all_explorer_windows(NULL), 1040, 620);
+            return 1;
+
+        case 'M':
+            
+            return 1;
         
         case '1':
         case '2':
@@ -126,6 +125,17 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
             else
                 open_explorer(key - 48);
             return 1;
+
+        case VK_INSERT: //ESC KEY
+            if(downtime(VK_INSERT) > 1000) {
+                PostMessage(NULL, WM_EXITAPP, 0, 0);
+                return 1;
+            }
+            if(downtime(VK_INSERT) > 20)
+                return 1;
+            super_mode = false;
+            animate_in = false;
+            return 1;
         }
     }
 
@@ -139,7 +149,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         SetTimer(hwnd, 1, 1, NULL);
         return 0;
     case WM_TIMER:
+        create_window_content(hwnd, r);
+        r+=1;
         animate_window(hwnd);
+        DWORD exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        if((exStyle & WS_EX_TOPMOST) != 0)
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         return 0;
     case WM_PAINT:
         return 0;
@@ -173,11 +188,11 @@ void create_window(HINSTANCE hInstance, int nCmdShow){
         "SuperMode Active",
         WS_POPUP,
         2000, wy,
-        200, 200,
+        250, 250,
         NULL, NULL, hInstance, NULL
     );
 
-    create_window_content(hwnd, L"gfx/icon.png");
+    create_window_content(hwnd, 0.0f);
 
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
@@ -222,7 +237,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     HHOOK hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInstance, 0);
 
-    // Ok apparently this is a way to tell the compiler that I know that they are unused but it doesn't matter
+    // Tell the compiler they aren't used
     (void)hPrevInstance;
     (void)lpCmdLine;
 

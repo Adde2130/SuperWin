@@ -24,5 +24,6 @@ void       close_explorer();
 bool       open_vscode();
 bool       explorer_change_content(HWND hwnd, const char* path);
 void       center_explorers();
+HWND*      get_all_explorer_windows(IShellWindows* psw);
 
 #endif

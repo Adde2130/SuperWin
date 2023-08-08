@@ -10,7 +10,7 @@ extern "C" {
 void paint_init();
 void paint_uninit();
 void paint_image(HWND hwnd, const WCHAR* filename);
-void create_window_content(HWND hwnd, const WCHAR* filename);
+void create_window_content(HWND hwnd, float rotation);
 
 #ifdef __cplusplus
 }

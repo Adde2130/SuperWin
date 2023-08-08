@@ -5,7 +5,7 @@
 #include <ShlObj.h>
 #include <stdio.h>
 
-void center_window(HWND hwnd);
-HWND* get_all_explorer_windows(IShellWindows* psw);
+void  center_window(HWND hwnd);
+void  stack_windows_diagonal(HWND* windows, int width, int height);
 
 #endif

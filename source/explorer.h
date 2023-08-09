@@ -22,7 +22,7 @@ void       add_explorer_path(int preset);
 void       open_explorer(int preset);
 void       close_explorer();
 bool       open_vscode();
-bool       explorer_change_content(HWND hwnd, const char* path);
+bool       explorer_change_content(IShellWindows* psw, HWND hwnd, const char* path);
 void       center_explorers();
 HWND*      get_all_explorer_windows(IShellWindows* psw);
 

@@ -6,6 +6,6 @@
 #include <stdio.h>
 
 void  center_window(HWND hwnd);
-void  stack_windows_diagonal(HWND* windows, int width, int height);
+void  stack_windows(HWND* windows, int width, int height, int xoffset, int yoffset);
 
 #endif

@@ -8,9 +8,23 @@
 #include <stdio.h>
 
 IDispatch* get_explorer(IShellWindows* psw, HWND hwnd){
+    HRESULT hr;
+    bool free_psw = false;
+    if(psw == NULL){
+        hr = CoCreateInstance(&CLSID_ShellWindows, NULL, CLSCTX_ALL, &IID_IShellWindows, (void**)&psw);
+        free_psw = true;
+        if(FAILED(hr)){
+            DWORD error = GetLastError();
+            fprintf(stderr, "Failed to create COM library instance. Error code: %lu\n", error);
+            return NULL;
+        }
+    }
+
     long count = 0;
-    HRESULT hr = psw->lpVtbl->get_Count(psw, &count);
+    hr = psw->lpVtbl->get_Count(psw, &count);
     if (FAILED(hr)) {
+        if(free_psw)
+            psw->lpVtbl->Release(psw);
         fprintf(stderr, "Could not get number of shell windows\n");
         return NULL;
     }
@@ -22,14 +36,15 @@ IDispatch* get_explorer(IShellWindows* psw, HWND hwnd){
         vi.lVal = i;
         IDispatch *pDisp = NULL;
         hr = psw->lpVtbl->Item(psw, vi, &pDisp);
+        VariantClear(&vi);
 
         if (FAILED(hr) || !pDisp)
             continue;
 
         IWebBrowserApp *pApp = NULL;
         hr = pDisp->lpVtbl->QueryInterface(pDisp, &IID_IWebBrowserApp, (void**)&pApp);
-
-        if (FAILED(hr) || !pApp)
+        pApp->lpVtbl->Release(pApp);
+        if (FAILED(hr))
             continue;
 
         HWND temphwnd;
@@ -37,8 +52,19 @@ IDispatch* get_explorer(IShellWindows* psw, HWND hwnd){
         if(temphwnd != hwnd)
             continue;
 
+        char classname[256];
+        GetClassName(hwnd, classname, sizeof(classname));
+        if(strcmp(classname, "CabinetWClass"))
+            continue;
+
+        if(free_psw)
+            psw->lpVtbl->Release(psw);
+
         return pDisp;
+
     }
+
+    psw->lpVtbl->Release(psw);
 
     return NULL;
 }
@@ -46,6 +72,11 @@ IDispatch* get_explorer(IShellWindows* psw, HWND hwnd){
 char* get_explorer_path(HWND hwnd){
     HWND tophwnd = GetForegroundWindow();
     if(tophwnd == NULL) return NULL;
+
+    char classname[256];
+    GetClassName(hwnd, classname, sizeof(classname));
+    if(strcmp(classname, "CabinetWClass"))
+        return NULL;
 
     IShellWindows *psw = NULL;
     HRESULT hr = CoCreateInstance(&CLSID_ShellWindows, NULL, CLSCTX_ALL, &IID_IShellWindows, (void**)&psw);
@@ -72,7 +103,6 @@ char* get_explorer_path(HWND hwnd){
         return NULL;
     }
         
-
     IShellBrowser *pBrowser = NULL;
     hr = psp->lpVtbl->QueryService(psp, &SID_STopLevelBrowser, &IID_IShellBrowser, (void**)&pBrowser);
     if (FAILED(hr)){
@@ -288,48 +318,49 @@ HWND* get_all_explorer_windows(IShellWindows* psw){
         psw->lpVtbl->Release(psw);
     }
 
+    // Error prone apparently?
+    windows = realloc(windows, sizeof(HWND) * (size) + 1);
     windows[size] = NULL;
-    windows = realloc(windows, sizeof(HWND) * (size + 1));
-
-    // For now, I don't know why this happens...
-    if(windows[size] != NULL){
-        fprintf(stderr, "Last element is not set to NULL????\n");
-        return NULL;
-    }
 
     return windows;
 }
 
-bool explorer_change_content(HWND hwnd, const char* path){
-    IShellWindows *psw = NULL;
-    HRESULT hr = CoCreateInstance(&CLSID_ShellWindows, NULL, CLSCTX_ALL, &IID_IShellWindows, (void**)&psw);
-    if(FAILED(hr)) {
-        fprintf(stderr, "Failed to create COM library instance\n");
-        return false;
+bool explorer_change_content(IShellWindows* psw, HWND hwnd, const char* path){
+    HRESULT hr;
+    bool free_psw = false;
+    if(psw == NULL){
+        hr = CoCreateInstance(&CLSID_ShellWindows, NULL, CLSCTX_ALL, &IID_IShellWindows, (void**)&psw);
+        free_psw = true;
+        if(FAILED(hr)) {
+            fprintf(stderr, "Failed to create COM library instance\n");
+            return false;
+        }
     }
+
 
     char classname[256];
     GetClassName(hwnd, classname, sizeof(classname));
     if(strcmp(classname, "CabinetWClass")){
-        psw->lpVtbl->Release(psw);
+        if(free_psw)
+            psw->lpVtbl->Release(psw);
         return false;
     }
         
     IDispatch* pdisp = get_explorer(psw, hwnd);  
+    if(free_psw)
+        psw->lpVtbl->Release(psw);
+
     if(pdisp == NULL){
         return false;
     }
 
-    psw->lpVtbl->Release(psw);
-
     IServiceProvider* psp;
     hr = pdisp->lpVtbl->QueryInterface(pdisp, &IID_IServiceProvider, (void**)&psp);
+    pdisp->lpVtbl->Release(pdisp);
     if(FAILED(hr) || !psp){
         fprintf(stderr, "Failed to query ISeriveProvider\n");
-        pdisp->lpVtbl->Release(pdisp);
         return false;
     }
-    pdisp->lpVtbl->Release(pdisp);
 
     IShellBrowser* psb;
     hr = psp->lpVtbl->QueryService(psp, &SID_STopLevelBrowser, &IID_IShellBrowser, (void**)&psb);
@@ -346,11 +377,11 @@ bool explorer_change_content(HWND hwnd, const char* path){
     {
         hr = psb->lpVtbl->BrowseObject(psb, pidl, SVSI_DESELECTOTHERS | SVSI_SELECT | SVSI_ENSUREVISIBLE | SVSI_FOCUSED | SVSI_DESELECT);
         psb->lpVtbl->Release(psb);
+        ILFree(pidl);
         if(FAILED(hr)){
             fprintf(stderr, "Failed to browse object\n");
             return false;
         }
-        ILFree(pidl);
         return true;
     }
     psb->lpVtbl->Release(psb);
@@ -441,7 +472,7 @@ void open_explorer(int preset){
         return;
     }
 
-    if(!explorer_change_content(GetForegroundWindow(), path))
+    if(!explorer_change_content(NULL, GetForegroundWindow(), path))
         ShellExecute(NULL, "open", "explorer.exe", path, NULL, SW_SHOWDEFAULT);
 }
 

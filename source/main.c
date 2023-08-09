@@ -103,8 +103,20 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
             close_explorer();
             return 1;
 
-        case 'R':
-            stack_windows_diagonal(get_all_explorer_windows(NULL), 1040, 620);
+        case 'R': {
+            HWND* windows = get_all_explorer_windows(NULL);
+            stack_windows(windows, 1040, 620, 40, 40);
+            if(windows != NULL)
+                free(windows);
+            }
+            return 1;
+        
+        case 'E': {
+            HWND* windows = get_all_explorer_windows(NULL);
+            stack_windows(windows, 1040, 620, 40, 0);
+            if(windows != NULL)
+                free(windows);
+            }
             return 1;
 
         case 'M':

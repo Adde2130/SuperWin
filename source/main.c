@@ -21,13 +21,19 @@
 
 #define downtime(key) (GetTickCount() - keys[key].pressed_time)
 
-bool super_mode = true;
-float r = 0.1;
-
 typedef struct {
     DWORD pressed_time;
     bool down;
 } KeyState;
+
+
+HWND windows[4] = {0,0,0,0};
+
+bool super_mode = true;
+
+float r = 0; // Rotation of circle
+float speed = 1.5; // Think it is in radians
+
 
 KeyState keys[256] = {0};
 
@@ -37,6 +43,49 @@ int wx, wy;
 int tick = 0;
 
 bool animate_in = true;
+
+void setup_windows(){
+    HWND* new_windows = get_all_explorer_windows(NULL);
+    windows[0] = new_windows[0];
+    windows[1] = new_windows[1];
+    windows[2] = new_windows[2];
+    windows[3] = new_windows[3];
+    free(new_windows);
+
+    int screenw = GetSystemMetrics(SM_CXSCREEN);
+    int screenh = GetSystemMetrics(SM_CYSCREEN);
+
+    int posx = 0;
+    int posy = 0;
+
+    for(int i = 0; i < 4; i++){
+        HWND hwnd = windows[i];
+        if(hwnd == NULL) 
+            continue;
+
+        ShowWindow(hwnd, SW_RESTORE);
+        LONG style = GetWindowLong(hwnd, GWL_STYLE);
+        SetWindowLong(hwnd, GWL_STYLE, style & ~WS_CAPTION);
+
+        MoveWindow(hwnd, posx, posy, screenw / 2, screenh / 2, true);
+        posx += screenw / 2;
+        if(posx >= screenw){
+            posx = 0;
+            posy += screenh / 2;
+        }
+    }
+}
+
+void enter_super_mode(){
+    show_desktop_icons(false);
+    show_taskbar(false);
+    //setup_windows();
+}
+
+void exit_super_mode(){
+    show_desktop_icons(true);
+    show_taskbar(true);
+}
 
 void animate_window(HWND hwnd){
     int curve_pos = wx + 225 + tick * tick - 30 * tick;
@@ -80,8 +129,8 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
             super_mode = true;
             animate_in = true;
             SetWindowPos(hwnd, NULL, 2000, wy, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-
             ShowWindow(hwnd, super_mode);
+            enter_super_mode();
             return 1;
         }
 
@@ -147,11 +196,27 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
                 return 1;
             super_mode = false;
             animate_in = false;
+            exit_super_mode();
             return 1;
         }
     }
 
     return CallNextHookEx(NULL, n_code, w_param, l_param);
+}
+
+LRESULT CALLBACK CBTProc(int nCode, WPARAM wParam, LPARAM lParam){
+    if (nCode == HCBT_CREATEWND) {
+        HWND hwnd = (HWND)wParam;
+
+        // Adjust size and position
+        SetWindowPos(hwnd, NULL, 960, 540, 960, 540, SWP_NOZORDER);
+
+        // Remove the title bar
+        LONG style = GetWindowLong(hwnd, GWL_STYLE);
+        SetWindowLong(hwnd, GWL_STYLE, style & ~WS_CAPTION);
+    }
+
+    return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
 
 // Callbacks to the visible part
@@ -162,7 +227,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     case WM_TIMER:
         create_window_content(hwnd, r);
-        r+=1;
+        r+=speed;
         animate_window(hwnd);
         DWORD exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
         if((exStyle & WS_EX_TOPMOST) != 0)
@@ -182,6 +247,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
+
+
 
 void create_window(HINSTANCE hInstance, int nCmdShow){
     WNDCLASS window = {}; // Empty init makes compiler not throw warnings
@@ -231,11 +298,15 @@ void fix_files(){
             fclose(f);
         }
     }
-
     
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow){
+
+    // Tell the compiler they aren't used
+    (void)hPrevInstance;
+    (void)lpCmdLine;
+
     fix_files();
 
     if(CoInitializeEx(NULL, COINIT_MULTITHREADED) != S_OK){
@@ -243,20 +314,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
     paint_init();
-    
 
     create_window(hInstance, nCmdShow);
 
-    HHOOK hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInstance, 0);
-
-    // Tell the compiler they aren't used
-    (void)hPrevInstance;
-    (void)lpCmdLine;
-
-    if (!hook) {
-        MessageBox(NULL, "WINDOW HOOK FAILED????", "Error", MB_ICONERROR);
+    HHOOK key_hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInstance, 0);
+    if (!key_hook) {
+        MessageBox(NULL, "KEY_HOOK FAILED", "Error", MB_ICONERROR);
         return 1;
     }
+
+    HHOOK cbt_hook = SetWindowsHookEx(WH_CBT, CBTProc, NULL, GetCurrentThreadId());
+    if (!cbt_hook) {
+        MessageBox(NULL, "CBT_HOOK FAILED", "Error", MB_ICONERROR);
+        return 1;
+    }
+
+    enter_super_mode();
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -267,8 +340,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         DispatchMessage(&msg);
     }
 
+    exit_super_mode();
     paint_uninit();
-    UnhookWindowsHookEx(hook);
+    UnhookWindowsHookEx(key_hook);
+    UnhookWindowsHookEx(cbt_hook);
     CoUninitialize();
     return msg.wParam;
 }

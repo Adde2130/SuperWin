@@ -1,6 +1,6 @@
 CC := gcc
 CXX := g++
-CFLAGS := -Wall -Wextra -Iinclude
+CFLAGS := -Wall -Wextra -Iinclude # -mwindows for no console
 CXXFLAGS := $(CFLAGS) -static-libstdc++
 
 SRC_DIR := source

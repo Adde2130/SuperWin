@@ -204,21 +204,6 @@ LRESULT CALLBACK LowLevelKeyboardProc(int n_code, WPARAM w_param, LPARAM l_param
     return CallNextHookEx(NULL, n_code, w_param, l_param);
 }
 
-LRESULT CALLBACK CBTProc(int nCode, WPARAM wParam, LPARAM lParam){
-    if (nCode == HCBT_CREATEWND) {
-        HWND hwnd = (HWND)wParam;
-
-        // Adjust size and position
-        SetWindowPos(hwnd, NULL, 960, 540, 960, 540, SWP_NOZORDER);
-
-        // Remove the title bar
-        LONG style = GetWindowLong(hwnd, GWL_STYLE);
-        SetWindowLong(hwnd, GWL_STYLE, style & ~WS_CAPTION);
-    }
-
-    return CallNextHookEx(NULL, nCode, wParam, lParam);
-}
-
 // Callbacks to the visible part
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch(msg) {
@@ -248,7 +233,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-
+void LOAD_DLLS(){
+    HMODULE hDll = LoadLibrary(TEXT("dll/WindowCreationHook.dll"));
+    if(!hDll) exit(1);
+}
 
 void create_window(HINSTANCE hInstance, int nCmdShow){
     WNDCLASS window = {}; // Empty init makes compiler not throw warnings
@@ -302,11 +290,11 @@ void fix_files(){
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow){
-
     // Tell the compiler they aren't used
     (void)hPrevInstance;
     (void)lpCmdLine;
 
+    LOAD_DLLS();
     fix_files();
 
     if(CoInitializeEx(NULL, COINIT_MULTITHREADED) != S_OK){
@@ -323,11 +311,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
-    HHOOK cbt_hook = SetWindowsHookEx(WH_CBT, CBTProc, NULL, GetCurrentThreadId());
-    if (!cbt_hook) {
-        MessageBox(NULL, "CBT_HOOK FAILED", "Error", MB_ICONERROR);
-        return 1;
-    }
+    // HHOOK cbt_hook = SetWindowsHookEx(WH_CBT, CBTProc, NULL, GetCurrentThreadId());
+    // if (!cbt_hook) {
+    //     MessageBox(NULL, "CBT_HOOK FAILED", "Error", MB_ICONERROR);
+    //     return 1;
+    // }
 
     enter_super_mode();
 
@@ -343,7 +331,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     exit_super_mode();
     paint_uninit();
     UnhookWindowsHookEx(key_hook);
-    UnhookWindowsHookEx(cbt_hook);
+    //UnhookWindowsHookEx(cbt_hook);
     CoUninitialize();
     return msg.wParam;
 }

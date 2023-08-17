@@ -1,8 +1,26 @@
 #include <windows.h>
+#include <set>
+#include <vector>
+#include <algorithm>
+#include <string>
 
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved) {
+std::set<HWND> encountered_windows;
+std::set<HWND> windows_on_screen;
+
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+    (void)lParam;
+    encountered_windows.insert(hwnd);
+    return TRUE;
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+    (void)hModule;
+    (void)lpReserved;
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH:
+        if(encountered_windows.size() == 0)
+            EnumWindows(EnumWindowsProc, 0);
+        break;
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
     case DLL_PROCESS_DETACH:
@@ -12,17 +30,28 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 }
 
 extern "C" __declspec(dllexport) LRESULT CALLBACK CBTHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HCBT_CREATEWND) {
-        MessageBoxA(NULL, "HERE", "HERE", MB_OK);
+    switch(nCode) {
+    case HCBT_ACTIVATE: {
         HWND hwnd = (HWND)wParam;
+        if (encountered_windows.count(hwnd))
+            break;
 
-        // Adjust size and position
-        SetWindowPos(hwnd, NULL, 960, 540, 960, 540, SWP_NOZORDER);
+        SetWindowPos(hwnd, NULL, 960 * (windows_on_screen.size() % 2), 540 * (windows_on_screen.size() / 2), 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+        encountered_windows.insert(hwnd);
+        windows_on_screen.insert(hwnd);
 
-        // Remove the title bar
-        LONG style = GetWindowLong(hwnd, GWL_STYLE);
-        SetWindowLong(hwnd, GWL_STYLE, style & ~WS_CAPTION);
+        break; 
+    }
+
+    case HCBT_DESTROYWND: {
+        HWND hwnd = (HWND)wParam;
+        windows_on_screen.erase(hwnd);
+        encountered_windows.erase(hwnd);
+        break;
+    }
+
     }
 
     return CallNextHookEx(NULL, nCode, wParam, lParam);
+
 }

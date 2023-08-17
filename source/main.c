@@ -6,15 +6,23 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include "explorer.h"
+#include "paint.h"
+#include "window.h"
+
 #ifdef WIN32
 #include <io.h>
 #define F_OK 0
 #define access _access
 #endif
 
-#include "explorer.h"
-#include "paint.h"
-#include "window.h"
+/* DLL FUNCTIONS AND HOOKS */
+HMODULE hWindowCreationHook;
+HOOKPROC cbt_address;
+HHOOK cbt_hook;
+
+HHOOK key_hook;
+
 
 // This is a custom command
 #define WM_EXITAPP WM_USER + 1
@@ -233,9 +241,44 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-void LOAD_DLLS(){
-    HMODULE hDll = LoadLibrary(TEXT("dll/WindowCreationHook.dll"));
-    if(!hDll) exit(1);
+bool LOAD_DLLS(){
+    hWindowCreationHook  = LoadLibrary(TEXT("dll/WindowCreationHook.dll"));
+    if(!hWindowCreationHook){
+        DWORD error = GetLastError();
+        fprintf(stderr, "Failed to load DLL. Error code: %lu\n", error);
+        return false;
+    }
+    return true;
+}
+
+bool SET_HOOKS(HINSTANCE hInstance) {
+    key_hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInstance, 0);
+    if (!key_hook) {
+        fprintf(stderr, "Failed setting LowLevelKeyboardProc hook\n");
+        return false;
+    }
+
+    cbt_address = (HOOKPROC)GetProcAddress(hWindowCreationHook, "CBTHookProc");
+    if(!cbt_address) {
+        fprintf(stderr, "Failed loading address for CBTHookProc in hWindowCreationHook.dll\n");
+        return false;
+    }
+    cbt_hook = SetWindowsHookEx(WH_CBT, cbt_address, hWindowCreationHook, 0);
+    if (!cbt_hook) {
+        fprintf(stderr, "Failed setting CBTHookProc from hWindowCreationHook.dll\n");
+        return false;
+    }
+
+    return true;
+}
+
+void UNLOAD_DLLS(){
+    FreeLibrary(hWindowCreationHook);
+}
+
+void UNHOOK(){
+    UnhookWindowsHookEx(key_hook);
+    UnhookWindowsHookEx(cbt_hook);
 }
 
 void create_window(HINSTANCE hInstance, int nCmdShow){
@@ -294,28 +337,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     (void)hPrevInstance;
     (void)lpCmdLine;
 
-    LOAD_DLLS();
+    if(!LOAD_DLLS()){
+        printf("FAILED LOADING DLL");
+        UNLOAD_DLLS();
+        return 1;
+    }
+
     fix_files();
 
     if(CoInitializeEx(NULL, COINIT_MULTITHREADED) != S_OK){
         printf("ERROR: Failed to initialize the COM library");
         return 1;
     }
+
     paint_init();
 
     create_window(hInstance, nCmdShow);
 
-    HHOOK key_hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInstance, 0);
-    if (!key_hook) {
-        MessageBox(NULL, "KEY_HOOK FAILED", "Error", MB_ICONERROR);
+    if(!SET_HOOKS(hInstance)){
+        UNHOOK();
+        UNLOAD_DLLS();
         return 1;
     }
-
-    // HHOOK cbt_hook = SetWindowsHookEx(WH_CBT, CBTProc, NULL, GetCurrentThreadId());
-    // if (!cbt_hook) {
-    //     MessageBox(NULL, "CBT_HOOK FAILED", "Error", MB_ICONERROR);
-    //     return 1;
-    // }
 
     enter_super_mode();
 
@@ -330,8 +373,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     exit_super_mode();
     paint_uninit();
-    UnhookWindowsHookEx(key_hook);
-    //UnhookWindowsHookEx(cbt_hook);
+    UNHOOK();
+    UNLOAD_DLLS();
     CoUninitialize();
     return msg.wParam;
 }
